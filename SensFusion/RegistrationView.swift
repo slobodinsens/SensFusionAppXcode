@@ -37,14 +37,16 @@ struct RegistrationView: View {
                         .textFieldStyle(RoundedBorderTextFieldStyle())
                         .padding(.horizontal)
                     
-                    // Register Button with server logic.
+                    // Register Button with temporary local storage logic.
                     Button(action: {
                         Task {
                             let success = await registerUser(email: email, password: password)
                             if success {
+                                // **Temporarily Save Registration Data Locally**
+                                saveRegistrationData(email: email, password: password)
                                 registrationComplete = true
                             } else {
-                                // You might want to handle error feedback here.
+                                print("Registration failed")
                             }
                             // Dismiss the keyboard.
                             UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
@@ -101,6 +103,22 @@ struct RegistrationView: View {
             print("Registration error: \(error)")
             return false
         }
+    }
+
+    // **Temporary Local Storage Function**
+    func saveRegistrationData(email: String, password: String) {
+        UserDefaults.standard.set(email, forKey: "registeredEmail")
+        UserDefaults.standard.set(password, forKey: "registeredPassword")
+        print("✅ Registration Data Saved Locally - Email: \(email), Password: \(password)")
+    }
+
+    // **Function to Load Stored Registration Data (for Testing)**
+    func loadRegistrationData() -> (String, String)? {
+        if let email = UserDefaults.standard.string(forKey: "registeredEmail"),
+           let password = UserDefaults.standard.string(forKey: "registeredPassword") {
+            return (email, password)
+        }
+        return nil
     }
 }
 

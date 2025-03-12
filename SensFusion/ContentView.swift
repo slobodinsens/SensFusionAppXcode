@@ -25,8 +25,8 @@ struct ContentView: View {
     @State private var password = ""
     @State private var isLoginActive = false
     @State private var isSignUpActive = false
-    @State private var loginErrorMessage = ""
-    @State private var showLoginErrorAlert = false
+    @State private var message = ""
+    @State private var showMessageAlert = false
     
     // This state variable will track the current keyboard height.
     @State private var keyboardHeight: CGFloat = 0
@@ -55,15 +55,15 @@ struct ContentView: View {
                     
                     // Buttons
                     HStack(spacing: 20) {
-                        // Login Button with server logic.
+                        // Login Button
                         Button(action: {
                             Task {
                                 let success = await loginUser(email: email, password: password)
                                 if success {
                                     isLoginActive = true
                                 } else {
-                                    loginErrorMessage = "Invalid credentials. Please check your email and password."
-                                    showLoginErrorAlert = true
+                                    message = "Invalid credentials. Please check your email and password."
+                                    showMessageAlert = true
                                 }
                             }
                         }) {
@@ -74,15 +74,19 @@ struct ContentView: View {
                                 .foregroundColor(.white)
                                 .cornerRadius(8)
                         }
-                        .alert(isPresented: $showLoginErrorAlert) {
-                            Alert(title: Text("Login Error"),
-                                  message: Text(loginErrorMessage),
-                                  dismissButton: .default(Text("OK")))
-                        }
-                        
-                        // SignUp Button navigates to the registration screen.
+
+                        // SignUp Button (with temporary registration logic)
                         Button(action: {
-                            isSignUpActive = true
+                            Task {
+                                let success = await registerUser(email: email, password: password)
+                                if success {
+                                    message = "Registration successful! You can now log in."
+                                    showMessageAlert = true
+                                } else {
+                                    message = "Registration failed. Try again."
+                                    showMessageAlert = true
+                                }
+                            }
                         }) {
                             Text("SignUp")
                                 .frame(maxWidth: .infinity)
@@ -94,11 +98,8 @@ struct ContentView: View {
                     }
                     .padding(.horizontal)
                     
+                    // Navigation Links
                     NavigationLink(destination: HomeView(), isActive: $isLoginActive) {
-                        EmptyView()
-                    }
-                    
-                    NavigationLink(destination: RegistrationView(), isActive: $isSignUpActive) {
                         EmptyView()
                     }
                     
@@ -106,10 +107,12 @@ struct ContentView: View {
                 }
                 // Apply a counter offset equal to the keyboard height.
                 .offset(y: keyboardHeight)
-                // Animate the offset change.
                 .animation(.easeOut(duration: 0.16), value: keyboardHeight)
             }
             .navigationTitle("Login")
+            .alert(isPresented: $showMessageAlert) {
+                Alert(title: Text("Message"), message: Text(message), dismissButton: .default(Text("OK")))
+            }
         }
         // Listen for keyboard height changes and update our state.
         .onReceive(Publishers.keyboardHeight) { height in
@@ -117,8 +120,14 @@ struct ContentView: View {
         }
     }
     
-    // Function to send login request to server.
+    // MARK: - 🔐 Login Function (Checks Saved Data)
     func loginUser(email: String, password: String) async -> Bool {
+        // First, try to fetch locally stored registration data for testing.
+        if let savedData = loadRegistrationData() {
+            return email == savedData.0 && password == savedData.1
+        }
+        
+        // If no saved data exists, try to authenticate with the server.
         guard let url = URL(string: "https://example.com/api/login") else { return false }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -139,6 +148,53 @@ struct ContentView: View {
             print("Login error: \(error)")
             return false
         }
+    }
+
+    // MARK: - 📝 Registration Function (Temporarily Saves Locally)
+    func registerUser(email: String, password: String) async -> Bool {
+        // First, try to save locally for testing.
+        saveRegistrationData(email: email, password: password)
+        
+        // Uncomment the server request when the backend is ready.
+        /*
+        guard let url = URL(string: "https://example.com/api/register") else { return false }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        let payload = ["email": email, "password": password]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: payload)
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            if let httpResponse = response as? HTTPURLResponse,
+               httpResponse.statusCode == 200,
+               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let success = json["success"] as? Bool {
+                return success
+            }
+            return false
+        } catch {
+            print("Registration error: \(error)")
+            return false
+        }
+        */
+        
+        return true // Return success since we're using local storage for now.
+    }
+
+    // MARK: - 💾 Save & Load Registration Data Locally (For Testing)
+    func saveRegistrationData(email: String, password: String) {
+        UserDefaults.standard.set(email, forKey: "registeredEmail")
+        UserDefaults.standard.set(password, forKey: "registeredPassword")
+        print("✅ Registration Data Saved Locally - Email: \(email), Password: \(password)")
+    }
+
+    func loadRegistrationData() -> (String, String)? {
+        if let email = UserDefaults.standard.string(forKey: "registeredEmail"),
+           let password = UserDefaults.standard.string(forKey: "registeredPassword") {
+            return (email, password)
+        }
+        return nil
     }
 }
 
