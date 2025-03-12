@@ -1,7 +1,7 @@
 import SwiftUI
 import Combine
 
-// A publisher that emits the keyboard height when it appears or disappears.
+// Keyboard height publisher extension
 extension Publishers {
     static var keyboardHeight: AnyPublisher<CGFloat, Never> {
         let willShow = NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)
@@ -55,16 +55,16 @@ struct ContentView: View {
                     
                     // Buttons
                     HStack(spacing: 20) {
-                        // Login Button
+                        // Login Button with server logic.
                         Button(action: {
-                            if email == userData.registeredEmail &&
-                               password == userData.registeredPassword &&
-                               !email.isEmpty &&
-                               !password.isEmpty {
-                                isLoginActive = true
-                            } else {
-                                loginErrorMessage = "Invalid credentials. Please check your email and password."
-                                showLoginErrorAlert = true
+                            Task {
+                                let success = await loginUser(email: email, password: password)
+                                if success {
+                                    isLoginActive = true
+                                } else {
+                                    loginErrorMessage = "Invalid credentials. Please check your email and password."
+                                    showLoginErrorAlert = true
+                                }
                             }
                         }) {
                             Text("Login")
@@ -80,7 +80,7 @@ struct ContentView: View {
                                   dismissButton: .default(Text("OK")))
                         }
                         
-                        // SignUp Button
+                        // SignUp Button navigates to the registration screen.
                         Button(action: {
                             isSignUpActive = true
                         }) {
@@ -113,9 +113,31 @@ struct ContentView: View {
         }
         // Listen for keyboard height changes and update our state.
         .onReceive(Publishers.keyboardHeight) { height in
-            // When the keyboard appears, system usually shifts the content up by "height".
-            // We add the same amount as a positive offset to push it back down.
             self.keyboardHeight = height
+        }
+    }
+    
+    // Function to send login request to server.
+    func loginUser(email: String, password: String) async -> Bool {
+        guard let url = URL(string: "https://example.com/api/login") else { return false }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        let payload = ["email": email, "password": password]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: payload)
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            if let httpResponse = response as? HTTPURLResponse,
+               httpResponse.statusCode == 200,
+               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let success = json["success"] as? Bool {
+                return success
+            }
+            return false
+        } catch {
+            print("Login error: \(error)")
+            return false
         }
     }
 }

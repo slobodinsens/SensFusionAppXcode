@@ -1,23 +1,6 @@
 import SwiftUI
 import Combine
 
-// Remove the following extension if it’s already defined in your project.
-// extension Publishers {
-//     static var keyboardHeight: AnyPublisher<CGFloat, Never> {
-//         let willShow = NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)
-//             .map { notification -> CGFloat in
-//                 if let frame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect {
-//                     return frame.height
-//                 }
-//                 return 0
-//             }
-//         let willHide = NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)
-//             .map { _ in CGFloat(0) }
-//         return MergeMany(willShow, willHide)
-//             .eraseToAnyPublisher()
-//     }
-// }
-
 struct RegistrationView: View {
     @EnvironmentObject var userData: UserData
 
@@ -54,14 +37,18 @@ struct RegistrationView: View {
                         .textFieldStyle(RoundedBorderTextFieldStyle())
                         .padding(.horizontal)
                     
-                    // Register Button
+                    // Register Button with server logic.
                     Button(action: {
-                        // Save registration data in the shared model.
-                        userData.registeredEmail = email
-                        userData.registeredPassword = password
-                        registrationComplete = true
-                        // Dismiss the keyboard.
-                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                        Task {
+                            let success = await registerUser(email: email, password: password)
+                            if success {
+                                registrationComplete = true
+                            } else {
+                                // You might want to handle error feedback here.
+                            }
+                            // Dismiss the keyboard.
+                            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                        }
                     }) {
                         Text("Register")
                             .frame(maxWidth: .infinity)
@@ -89,6 +76,30 @@ struct RegistrationView: View {
         // Listen for keyboard height changes and update our state.
         .onReceive(Publishers.keyboardHeight) { height in
             self.keyboardHeight = height
+        }
+    }
+    
+    // Function to send registration data to the server.
+    func registerUser(email: String, password: String) async -> Bool {
+        guard let url = URL(string: "https://example.com/api/register") else { return false }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        let payload = ["email": email, "password": password]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: payload)
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            if let httpResponse = response as? HTTPURLResponse,
+               httpResponse.statusCode == 200,
+               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let success = json["success"] as? Bool {
+                return success
+            }
+            return false
+        } catch {
+            print("Registration error: \(error)")
+            return false
         }
     }
 }
